@@ -8,6 +8,9 @@
 #include <mem.h>
 #include <cache.h>
 #include <config.h>
+#include <objpool.h>
+
+OBJPOOL_ALLOC(emul_cache, struct emul_mem, sizeof(struct emul_mem));
 
 static void vm_master_init(struct vm* vm, const struct vm_config* config, vmid_t vm_id)
 {
@@ -47,6 +50,7 @@ void vm_vcpu_init(struct vm* vm, const struct vm_config* config)
     vcpu->id = vcpu_id;
     vcpu->phys_id = cpu()->id;
     vcpu->vm = vm;
+    vcpu->active = true;
     cpu()->vcpu = vcpu;
 
     vcpu_arch_init(vcpu, vm);
@@ -229,6 +233,28 @@ static struct vm* vm_allocation_init(struct vm_allocation* vm_alloc)
     return vm;
 }
 
+static void vm_init_virtio(struct vm* vm, const struct vm_config* vm_config)
+{
+    if (vm_config->platform.virtiodevices_num > 0) {
+        vm->virtiodevices_num = vm_config->platform.virtiodevices_num;
+        vm->virtio_pooling = vm_config->platform.virtio_pooling;
+        vm->virtio_interrupt = vm_config->platform.virtio_interrupt;
+        vm->virtiodevices = vm_config->platform.virtiodevices;
+
+        for (int i = 0; i < vm_config->platform.virtiodevices_num; i++) {
+            struct virtio_device* virtio_dev = &vm_config->platform.virtiodevices[i];
+            if (!virtio_dev->is_back_end) {
+                struct emul_mem* emu = objpool_alloc(&emul_cache);
+                emu->va_base = virtio_dev->va;
+                emu->size = virtio_dev->size;
+                emu->handler = virtio_mmio_emul_handler;
+                vm_emul_add_mem(vm, emu);
+            }
+        }
+        virtio_assign_cpus(vm);
+    }
+}
+
 struct vm* vm_init(struct vm_allocation* vm_alloc, const struct vm_config* config, bool master,
     vmid_t vm_id)
 {
@@ -268,6 +294,7 @@ struct vm* vm_init(struct vm_allocation* vm_alloc, const struct vm_config* confi
         vm_init_mem_regions(vm, config);
         vm_init_dev(vm, config);
         vm_init_ipc(vm, config);
+        vm_init_virtio(vm, config);
     }
 
     cpu_sync_and_clear_msgs(&vm->sync);
@@ -347,6 +374,9 @@ __attribute__((weak)) cpumap_t vm_translate_to_vcpu_mask(struct vm* vm, cpumap_t
 
 void vcpu_run(struct vcpu* vcpu)
 {
-    cpu()->vcpu->active = true;
-    vcpu_arch_run(vcpu);
+    if (vcpu->active == false) {
+        cpu_idle();
+    } else {
+        vcpu_arch_run(vcpu);
+    }
 }

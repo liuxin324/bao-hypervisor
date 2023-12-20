@@ -135,6 +135,9 @@ void vmm_init()
     vmid_t vm_id = -1;
     if (vmm_assign_vcpu(&master, &vm_id)) {
         struct vm_allocation* vm_alloc = vmm_alloc_install_vm(vm_id, master);
+        if (cpu()->id == CPU_MASTER) {
+            virtio_init();
+        }
         struct vm_config* vm_config = &config.vmlist[vm_id];
         struct vm* vm = vm_init(vm_alloc, vm_config, master, vm_id);
         cpu_sync_barrier(&vm->sync);

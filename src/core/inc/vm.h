@@ -17,6 +17,7 @@
 #include <bitmap.h>
 #include <io.h>
 #include <ipc.h>
+#include <virtio.h>
 
 struct vm_mem_region {
     paddr_t base;
@@ -46,6 +47,12 @@ struct vm_platform {
 
     size_t dev_num;
     struct vm_dev_region* devs;
+
+    /* VirtIO devices */
+    size_t virtiodevices_num;
+    bool virtio_pooling;
+    size_t virtio_interrupt;
+    struct virtio_device* virtiodevices;
 
     // /**
     //  * In MPU-based platforms which might also support virtual memory
@@ -84,6 +91,12 @@ struct vm {
 
     size_t ipc_num;
     struct ipc* ipcs;
+
+    /* VirtIO devices */
+    size_t virtiodevices_num;
+    bool virtio_pooling;
+    size_t virtio_interrupt;
+    struct virtio_device* virtiodevices;
 };
 
 struct vcpu {
